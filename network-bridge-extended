@@ -1,0 +1,25 @@
+#!/bin/sh
+#============================================================================
+# network-bridge-extended
+#
+# Primarily a wrapper for network-bridge.  Adds the 
+# following environment variables:
+#
+# vifoutfilter: Limit traffic out the vif for ip4, arp, and ipv6 to any
+#               assigned addresses.  If no addresses are assigned for a protocol,
+#               all traffic for that protocol is allowed. Defaults to 'yes'.
+#
+# antispoof: Now defaults to 'yes'
+#============================================================================
+
+vifoutfilter=${vifoutfilter:-yes}
+antispoof=${antispoof:-yes}
+
+dir=$(dirname "$0")
+
+. "$dir/network-bridge"
+. "$dir/network-bridge-eb.sh"
+.  "$dir/network-common-ip6.sh"
+
+filter_eb
+filter_ip6

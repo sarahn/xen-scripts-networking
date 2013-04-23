@@ -1,0 +1,30 @@
+These custom scripts add filtering of input to the domUs as well as
+ ipv6 and mac antispoofing.
+
+See network-bridge-extended and vif-bridge-extended for configuration options.
+The default is for all filtering to be enabled.
+
+After running, please verify your sysctl rules match the following:
+
+$ /sbin/sysctl net.bridge
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 0
+net.bridge.bridge-nf-call-arptables = 0
+
+To use these scripts, in /etc/xen/xend-config.sxp replace
+
+(network-script 'network-bridge')
+
+with
+
+(network-script 'network-bridge-extended')
+
+Replace 
+
+(vif-script 'vif-bridge')
+
+with
+
+(vif-script 'vif-bridge-extended')
+
+

@@ -1,0 +1,32 @@
+#!/bin/sh
+#============================================================================
+# vif-bridge-extended
+#
+# Primarily a wrapper for vif-bridge.  Adds the following environment 
+# variables:
+#
+# antispoof: Disallow spoofing of ipv4, ipv6, and mac addresses if an address is 
+#            specified.  Allows all traffic if no address is specified.
+#            Defaults to 'yes'
+#
+# vifoutfilter: Limit traffic out the vif for ip4, arp to any
+#               assigned addresses.  If no addresses are assigned for a protocol,
+#               all traffic for that protocol is allowed.
+#               Defaults to 'yes'
+#
+# vifoutfilter_allowipv6: Additonally allow ipv6 traffic if vifoutfilter is 
+#                         specified.
+#                         Defaults to 'yes'
+#============================================================================
+
+antispoof=${antispoof:-yes}
+vifoutfilter=${vifoutfilter:-yes}
+vifoutfilter_allowip6=${vifoutfilter_allowip6:-yes}
+
+dir=$(dirname "$0")
+. "$dir/vif-bridge"
+. "$dir/vif-bridge-eb.sh"
+. "$dir/vif-common-ip6.sh"
+
+handle_ip6table
+handle_ebtable
