@@ -35,8 +35,11 @@ function handle_ebtable()
   iptables -F FORWARD
   release_lock "iptables"
 
-  echo "$ip" | grep "\." &> /dev/null
-  has_ipv4=$?
+  if echo "$ip" | grep -q "\." ; then
+    has_ipv4=0
+  else
+    has_ipv4=1
+  fi
 
   if [ "$command" != "online" ]; then
     if [ ${vifoutfilter} = 'yes' ] ; then
@@ -57,7 +60,7 @@ function handle_ebtable()
     then
       for addr in $ip
       do
-        if echo $addr | grep "\." &>/dev/null; then
+      if echo $addr | grep -q "\."; then
           ebtables -A "$vif"-out -p ip4 --ip-dst "$addr" -j in-dev-rules
           ebtables -A "$vif"-out -p arp --arp-ip-dst "$addr" -j in-dev-rules
         fi
@@ -85,8 +88,11 @@ function handle_ebtable()
   if [ "$has_ipv4" = "0" -a ${antispoof} = 'yes' ] 
   then
     local addr
+    if echo "$ip" | grep -vq 255.255.255.255; then
+      ebtables -A "$vif"-in -p ip4 --ip-protocol udp --ip-dst 255.255.255.255 --ip-destination-port 68 -j DROP
+    fi
     for addr in $ip ; do
-      if echo $addr | grep "\." &> /dev/null; then
+      if echo $addr | grep -q "\."; then
         ebtables -A "$vif"-in -p ip4 --ip-src "$addr" -j ACCEPT
         ebtables -A "$vif"-in -p arp --arp-ip-src "$addr" --arp-mac-src "$mac" -j ACCEPT
       fi

@@ -31,13 +31,17 @@ start_filtering_ip6() {
   if [ ${antispoof} = 'yes' ] ; then
     ip6tables -A in-dev-rules -m physdev --physdev-in ${pdev} -j ACCEPT
     ip6tables -A in-dev-rules -m physdev --physdev-in ${vif0} -j ACCEPT
+    ip6tables -A in-dev-rules -p ipv6-icmp --icmpv6-type 134 -j DROP
+    ip6tables -A in-dev-rules -p ipv6-icmp --icmpv6-type 137 -j DROP
   else
 		ip6tables -A in-dev-rules -j ACCEPT
   fi
 
   if [ ${vifoutfilter} = 'yes' ] ; then
+    ip6tables -A FORWARD -d fe80::/10 -p udp --dport 546 -j DROP
  	  ip6tables -A FORWARD  -m physdev --physdev-out ${pdev} -j in-dev-rules
 	  ip6tables -A FORWARD  -m physdev --physdev-out ${vif0} -j in-dev-rules
+    ip6tables -A FORWARD -d ff02::1 -j in-dev-rules
   else
   	ip6tables -A FORWARD -j in-dev-rules
   fi

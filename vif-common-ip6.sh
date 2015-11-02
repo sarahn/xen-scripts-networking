@@ -11,42 +11,57 @@
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
-# License along with this library; iantispoof=${antispoof:-no}
-
-antispoof=${antispoof:-no}
-vifoutfilter=${vifoutfilter:-no}
+# License along with this library;
 
 ip=${ip:-}
+mac=${mac:-}
 ip=$(xenstore_read_default "$XENBUS_PATH/ip" "$ip")
+mac=$(xenstore_read_default "$XENBUS_PATH/mac" "$mac")
 
-function frob_ip6table()
+frob_ip6table_cmd()
 {
-  if [ "$command" == "online" ]
+  local c=$1
+  shift
+  ip6tables "$c" in-dev-rules -m physdev --physdev-in "$vif" "$@" -j ACCEPT \
+    2>/dev/null
+}
+
+frob_ip6table()
+{
+  if [ "$command" == "online" ] || [ "$command" == "add" ]
   then
+    frob_ip6table_cmd -C $@ && return
     local c="-A"
   else
     local c="-D"
   fi
 
-  ip6tables "$c" in-dev-rules -m physdev --physdev-in "$vif" "$@" -j ACCEPT \
-    2>/dev/null ||
+  frob_ip6table_cmd $c $@ ||
     [ "$c" == "-D" ] ||
     log err \
      "ip6tables $c in-dev-rules -m physdev --physdev-in $vif $@ -j ACCEPT failed.
 If you are using ip6tables, this may affect networking for guest domains."
 }
 
-function frob_ip6table_outdevrules()
+frob_ip6table_outdevrules_cmd()
 {
-  if [ "$command" == "online" ]
+  local c=$1
+  shift
+  ip6tables "$c" FORWARD -m physdev --physdev-out "$vif" "$@" -j in-dev-rules \
+    2>/dev/null
+}
+
+frob_ip6table_outdevrules()
+{
+  if [ "$command" == "online" ] || [ "$command" == "add" ]
   then
+    frob_ip6table_outdevrules_cmd -C $@ && return
     local c="-A"
   else
     local c="-D"
   fi
 
-  ip6tables "$c" FORWARD -m physdev --physdev-out "$vif" "$@" -j in-dev-rules \
-    2>/dev/null ||
+   frob_ip6table_outdevrules_cmd $c $@ ||
     [ "$c" == "-D" ] ||
     log err \
      "ip6tables $c FORWARD -m physdev --physdev-out $vif $@ -j in-dev-rules failed.
@@ -60,7 +75,7 @@ If you are using iptables, this may affect networking for guest domains."
 # to those coming from the specified networks, though we allow DHCP requests
 # as well.
 #
-function handle_ip6table()
+handle_ip6table()
 {
   # Check for a working iptables installation.  Checking for the iptables
   # binary is not sufficient, because the user may not have the appropriate
@@ -71,46 +86,35 @@ function handle_ip6table()
     return
   fi
 
+
   claim_lock "ip6tables"
 
-  echo "$ip" > grep ":" &> /dev/null
   has_ipv6=$?
 
-  if [ "$has_ipv6" = "0"  -a ${antispoof} = 'yes' ]
-  then
-      local addr
-      for addr in $ip
-      do
-        if echo $addr | grep : &> /dev/null; then
-          frob_ip6table -s "$addr"
-          if echo $addr | grep -v "/" &> /dev/null; then
-            local solicited=$(ipv6calc --addr_to_fulluncompressed $addr | \
-              cut -f 1 -d "/" | \
-              awk -F":" '{print "FF02::1:ff" substr($7 ,length($7)-1) ":" $8} ')
-            frob_ip6table_outdevrules -d "$solicited"
-          fi
-        fi
-      done
-
-      # Always allow the domain to talk to a DHCP server.
-      frob_ip6table -p udp --sport 68 --dport 67
-  else
-      # No IP addresses have been specified, so allow anything.
-      frob_ip6table
+  #If there is no ipv6 address, allow nothing.
+  if ! ( echo "$ip" | grep -q ":" ); then
+    release_lock "ip6tables"
+    return
   fi
 
-  if [ "$has_ipv6" = "0" -a ${vifoutfilter} = 'yes' ]
-  then
-      local addr
-      for addr in $ip
-      do
-        if echo $addr | grep : &> /dev/null; then
-          frob_ip6table_outdevrules -d "$addr"
-        fi
-      done
-  else
-      frob_ip6table_outdevrules
-  fi
+  local link_local=$(ipv6calc --in prefix+mac --action prefixmac2ipv6 \
+                     --out ipv6addr fe80::/64 "$mac" | cut -f 1 -d "/")
+  ip="$ip $link_local"
+  local addr
+  for addr in $ip
+  do
+    if echo $addr | grep -q ":"; then
+      frob_ip6table -s "$addr"
+      frob_ip6table_outdevrules -d "$addr"
+      if echo $addr | grep -v "/" &> /dev/null; then
+        local solicited=$(ipv6calc --addr_to_fulluncompressed $addr | \
+         cut -f 1 -d "/" | \
+         awk -F":" '{print "FF02::1:ff" substr($7 ,length($7)-1) ":" $8} ')
+        frob_ip6table -s :: -d "$solicited"
+        frob_ip6table_outdevrules -d "$solicited"
+      fi
+    fi
+  done
 
   release_lock "ip6tables"
 }
